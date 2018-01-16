@@ -22,7 +22,7 @@ app.get('/products', (req, res) => {
 
 //PRODUCTS
 app.post('/products', (req, res) => {
-  const product = req.body.product;
+  const product = req.body; console.log('product', req.body)
   const newProductObject = {
     name: product.name,
     description: product.description,
