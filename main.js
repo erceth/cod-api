@@ -4,8 +4,25 @@ const express = require('express')
 const app = express()
 const router = express.Router()
 
-var bodyParser = require('body-parser');
+let bodyParser = require('body-parser');
 app.use(bodyParser.json());
+
+let config = require('./config');
+
+var stripe = require("stripe")(config.stripeSecretKey);
+
+//One option to handle CORS
+// app.use((req, res, next) => {
+//   res.header("Access-Control-Allow-Origin", "*");
+//   res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+//   next();
+// })
+
+/* TODO: add api prefix to all calls
+let api = express.Router();
+ap.use('/api', api);
+
+*/
 
 let db;
 
@@ -54,7 +71,68 @@ app.delete('/products/:id', (req, res) => {
 });
 
 
-//
+//PURCHASES
+app.post('/purchases', (req, res) => {
+  const purchase = req.body; console.log('purchase', req.body)
+  const newPurchaseObject = {
+    customerFirstName: purchase.customerFirstName,
+    customerLastName: purchase.customerLastName,
+    productId: purchase.productId,
+    baseCost: purchase.baseCost,
+    salesTax: purchase.salesTax,
+    addressLn1: purchase.addressLn1,
+    addressLn2: purchase.addressLn2,
+    state: purchase.state,
+    zip: purchase.zip
+  };
+  db.collection('purchases').insert(newPurchaseObject, (err, result) => {
+    res.json(result)
+  });
+});
+
+app.put('/purchases/:id', (req, res) => {
+  var id = req.params.id;
+  
+  const product = req.body.product;
+
+  db.collection('purchases').replaceOne(
+    {_id: new ObjectID(id)}, product, (err, result) => {
+      res.json(result)
+    })
+});
+
+app.delete('/purchases/:id', (req, res) => {
+  var id = req.params.id;
+
+  db.collection('purchases').deleteOne(
+    {_id: new ObjectID(id)}, (err, result) => {
+      res.json(result)
+    })
+});
+
+
+app.post('/newOrder', (req, res) => {
+  var stripeTokenId = req.body.stripeTokenId;
+  var orderDetails = req.body.orderDetails;
+  console.log('stripeTokenId', stripeTokenId)
+  console.log('orderDetails', orderDetails)
+
+    // Charge the user's card:
+    stripe.charges.create({
+      amount: orderDetails.totalCost,
+      currency: "usd",
+      description: orderDetails.description || 'Cup Of Dirt',
+      source: stripeTokenId,
+    }, (err, charge) => {
+      if (err) {
+        res.status(500).send({
+          message: 'Could not verify token with Stripe'
+        })
+        console.log('failed to ', err)
+      } 
+      res.json(charge);
+    });
+});
 
 
 
