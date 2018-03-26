@@ -39,7 +39,7 @@ app.get('/products', (req, res) => {
 
 //PRODUCTS
 app.post('/products', (req, res) => {
-  const product = req.body; console.log('product', req.body)
+  const product = req.body;
   const newProductObject = {
     name: product.name,
     description: product.description,
@@ -73,7 +73,7 @@ app.delete('/products/:id', (req, res) => {
 
 //PURCHASES
 app.post('/purchases', (req, res) => {
-  const purchase = req.body; console.log('purchase', req.body)
+  const purchase = req.body;
   const newPurchaseObject = {
     customerFirstName: purchase.customerFirstName,
     customerLastName: purchase.customerLastName,
@@ -112,30 +112,47 @@ app.delete('/purchases/:id', (req, res) => {
 
 
 app.post('/newOrder', (req, res) => {
-  var stripeTokenId = req.body.stripeTokenId;
+  var stripeToken = req.body.stripeToken;
   var orderDetails = req.body.orderDetails;
-  console.log('stripeTokenId', stripeTokenId)
-  console.log('orderDetails', orderDetails)
 
+  const newOrder = {
+    stripeToken,
+    orderDetails,
+    confirmTransaction: false
+  };
+  db.collection('orders').insertOne(newOrder).then((result) => {
     // Charge the user's card:
     stripe.charges.create({
       amount: orderDetails.totalCost,
-      currency: "usd",
+      currency: 'usd',
       description: orderDetails.description || 'Cup Of Dirt',
-      source: stripeTokenId,
+      source: stripeToken.id
     }, (err, charge) => {
       if (err) {
         res.status(500).send({
-          message: 'Could not verify token with Stripe'
+          message: err
         })
-        console.log('failed to ', err)
-      } 
-      res.json(charge);
+      }
+      // update database to confirm stripe transaction
+      db.collection('orders').update({
+        '_id': ObjectID(result.insertedId)
+      }, {
+        $set: {
+          confirmTransaction: new Date()
+        }
+      }).then(() => {
+        res.json(result);
+      }, (err) => {
+        res.json(result);
+        //payment made, unable to confirm transaction in db
+        //TODO: make a note in the log
+      }); 
     });
+  }, () => {
+    res.status(500).send({
+      message: 'Could not insert new order.'
+    });
+  })
 });
-
-
-
-
 
 app.listen(3000, () => console.log('example app listening on port 3000!'));
