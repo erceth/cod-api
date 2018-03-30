@@ -11,6 +11,8 @@ let config = require('./config');
 
 var stripe = require("stripe")(config.stripeSecretKey);
 
+let request = require(('request'));
+
 //One option to handle CORS
 // app.use((req, res, next) => {
 //   res.header("Access-Control-Allow-Origin", "*");
@@ -110,49 +112,46 @@ app.delete('/purchases/:id', (req, res) => {
     })
 });
 
-
 app.post('/newOrder', (req, res) => {
-  var stripeToken = req.body.stripeToken;
+  var stripeTokenId = req.body.stripeTokenId;
   var orderDetails = req.body.orderDetails;
 
-  const newOrder = {
-    stripeToken,
-    orderDetails,
-    confirmTransaction: false
-  };
-  db.collection('orders').insertOne(newOrder).then((result) => {
-    // Charge the user's card:
-    stripe.charges.create({
-      amount: orderDetails.totalCost,
-      currency: 'usd',
-      description: orderDetails.description || 'Cup Of Dirt',
-      source: stripeToken.id
-    }, (err, charge) => {
-      if (err) {
-        res.status(500).send({
-          message: err
-        })
-      }
-      // update database to confirm stripe transaction
-      db.collection('orders').update({
-        '_id': ObjectID(result.insertedId)
-      }, {
-        $set: {
-          confirmTransaction: new Date()
-        }
-      }).then(() => {
-        res.json(result);
-      }, (err) => {
-        res.json(result);
-        //payment made, unable to confirm transaction in db
-        //TODO: make a note in the log
-      }); 
+  // Charge the user's card:
+  stripe.charges.create({
+    amount: orderDetails.totalCost,
+    currency: 'usd',
+    description: orderDetails.description || 'Cup Of Dirt',
+    source: stripeTokenId
+  }, (err, charge) => {
+    if (err) {
+      res.status(500).send({
+        message: err,
+        charge
+      })
+    }
+    res.json(charge)
+  });
+});
+
+app.get('/orders', (req, res) => {
+  let limit = req.query.limit;
+  if (!limit) {
+    res.status(400).send({
+      message: '"limit" query not defined'
     });
-  }, () => {
-    res.status(500).send({
-      message: 'Could not insert new order.'
-    });
+    return;
+  }
+  request('https://' + config.stripeSecretKey + ':@api.stripe.com/v1/charges?limit=' + limit, (err, response, body) => {
+    if (err) {
+      res.status(500).send({
+        message: err
+      });
+    }
+    var info = JSON.parse(body);
+    console.log('info', info.data);
+    
+    res.send(info);
   })
 });
 
-app.listen(3000, () => console.log('example app listening on port 3000!'));
+app.listen(3000, () => console.log('COD api listening on port 3000!'));
